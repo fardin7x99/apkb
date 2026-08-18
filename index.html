@@ -1,0 +1,65 @@
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
+  import { getDatabase, ref, set, onValue } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-database.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyBCngJsALgSH3BGVPkeNpmKsQfuky_nhso",
+    authDomain: "apk-builder-fe71d.firebaseapp.com",
+    projectId: "apk-builder-fe71d",
+    storageBucket: "apk-builder-fe71d.firebasestorage.app",
+    messagingSenderId: "1082000946116",
+    appId: "1:1082000946116:web:a76bf464fb90d7b275aa91"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const database = getDatabase(app);
+
+  // আপনার গিটহাবের তথ্য এখানে দিন
+  const GITHUB_TOKEN = "ghp_আপননার_টোকেন_এখানে_দিন"; 
+  const GITHUB_USERNAME = "আপনার_গিটহাব_ইউজারনেম";
+  const GITHUB_REPO = "app-builder-base"; // রিপোজিটরির নাম
+
+  document.getElementById("buildButton").addEventListener("click", async function() {
+      const userHtmlCode = document.getElementById("htmlInput").value; // ইউজারের দেওয়া কোড
+      
+      // ১. ফায়ারবেসে স্ট্যাটাস আপডেট
+      set(ref(database, 'builds/latest'), { status: "Building...", downloadUrl: "" });
+      alert("অ্যাপ বিল্ড শুরু হয়েছে! প্রায় ২-৩ মিনিট সময় লাগবে। দয়া করে অপেক্ষা করুন...");
+
+      // ২. গিটহাবে কোড পাঠানো (Base64 এ কনভার্ট করে)
+      const encodedCode = btoa(unescape(encodeURIComponent(userHtmlCode)));
+      
+      // প্রথমে ফাইলের SHA পেতে হবে (আপডেট করার জন্য)
+      const getFileUrl = `https://api.github.com/repos/${GITHUB_USERNAME}/${GITHUB_REPO}/contents/app/src/main/assets/index.html`;
+      let sha = "";
+      try {
+          const res = await fetch(getFileUrl, { headers: { "Authorization": `token ${GITHUB_TOKEN}` } });
+          if(res.ok) { const data = await res.json(); sha = data.sha; }
+      } catch(e) { console.log("New file will be created"); }
+
+      // ফাইলে নতুন কোড পুশ করা
+      await fetch(getFileUrl, {
+          method: "PUT",
+          headers: {
+              "Authorization": `token ${GITHUB_TOKEN}`,
+              "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+              message: "User uploaded new HTML",
+              content: encodedCode,
+              sha: sha // আগের ফাইল রিপ্লেস করার জন্য
+          })
+      });
+
+      // ৩. ফায়ারবেসে লাইভ নজর রাখা (কখন অ্যাপ রেডি হবে)
+      const buildRef = ref(database, 'builds/latest');
+      onValue(buildRef, (snapshot) => {
+        const data = snapshot.val();
+        if (data && data.status === "Completed" && data.downloadUrl !== "") {
+            document.getElementById("downloadLink").href = data.downloadUrl;
+            document.getElementById("downloadLink").style.display = "block";
+            document.getElementById("downloadLink").innerText = "Download APK Now!";
+        }
+      });
+  });
+</script>
